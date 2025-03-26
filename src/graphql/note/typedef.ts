@@ -1,11 +1,20 @@
 export const typedef = `#graphql
-    type Note {
-        id: ID!
-        title: String!
-        content: String!
-        tags: [String!]!
-        createdAt: String!
-        updatedAt: String!
-        userId: ID!
-    }
+
+type Tag {
+  id: ID!
+  name: String!
+  problems: [ProblemTag!]!
+}
+
+type ProblemTag {
+  problemId: String!
+}
+
+type Note {
+  id: ID!
+  content: String!
+  user: User!
+  problemId: String! 
+  createdAt: String!
+}
 `

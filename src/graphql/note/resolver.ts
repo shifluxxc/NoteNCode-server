@@ -1,5 +1,4 @@
 import { prisma } from "../../lib/db";
-import { verifyToken } from "../../lib/auth"; // Middleware for JWT auth
 
 const Query = {
   getNotes: async (_: any, __: any, context: any) => {
@@ -8,55 +7,85 @@ const Query = {
   },
 
   getNoteById: async (_: any, { id }: { id: string }, context: any) => {
-    const userId = verifyToken(context);
+    const userId = context.user.userId ; 
     return await prisma.note.findFirst({ where: { id, userId } });
+  },
+
+  getProblemIdByTag: async (_: any, { tag }: { tag: string }) => {
+    const problemTags = await prisma.problemTag.findMany({
+      where: { tag: { name: tag } },
+      select: { problemId: true },
+    });
+  
+    return problemTags.map((entry) => entry.problemId); // Convert to a list of strings
+  }
+  ,
+  getTagsByProblemId: async (_: any, { problemId }: { problemId: string }) => {
+    const tags = await prisma.problemTag.findMany({
+      where: { problemId },
+      select: { tag: { select: { name: true } } }, // Select only the tag name
+    });
+  
+    return tags.map((entry) => entry.tag.name);
+  }, 
+  getNotesByProblem: async (_: any, { problemId }: { problemId: string }) => {
+    return await prisma.note.findMany({
+      where: { problemId },
+      include: { user: true },
+    });
   },
 };
 
 const Mutation = {
-    createNote: async (
-        _: any,
-        { title, content, tags }: { title: string; content: string; tags?: string[] },
-        context: any
-  ) => {
-    // console.log(context);   
-    const userId = String(context.user.userId); 
-    if (!userId)
-      {
-        throw new Error("no user find in context"); 
-          }
-        return await prisma.note.create({
-          data: {
-            title,
-            content,
-            tags : tags || [], // ✅ Ensure `tags` is always an array
-            userId,
-          },
-        });
-      },
+  addNote: async (_: any, { problemId, content }: { problemId: string; content: string }, context: any) => {
+    if (!context.user) {
+      throw new Error("Unauthorized");
+    }
 
-  updateNote: async (
-    _: any,
-    { id, title, content, tags }: { id: string; title?: string; content?: string; tags?: string[] },
-    context: any
-  ) => {
-    const userId = context.user.userId; 
-
-    return await prisma.note.update({
-      where: { id, userId },
+    const newNote = await prisma.note.create({
       data: {
-        ...(title && { title }),
-        ...(content && { content }),
-        ...(tags && { tags: { set: tags } }) // ✅ Only update tags if provided
+        userId: context.user.userId, // Ensure the user is associated
+        problemId,
+        content,
+      },
+      include: {
+        user: true, // Include user details // Include problem details
       },
     });
-  },
 
-  deleteNote: async (_: any, { id }: { id: string }, context: any) => {
-    const userId = context.user.userId ;
-    await prisma.note.delete({ where: { id, userId } });
-    return true;
+    return newNote;
   },
+  addTag: async (_: any, { problemId, tagName }: { problemId: string; tagName: string }) => {
+    // Find the tag, create it if it doesn't exist
+    let tag = await prisma.tag.findUnique({ where: { name: tagName } });
+    if (!tag) tag = await prisma.tag.create({ data: { name: tagName } });
+  
+    // Check if the problem-tag relationship already exists
+    const existingProblemTag = await prisma.problemTag.findUnique({
+      where: { problemId_tagId: { problemId, tagId: tag.id } },
+    });
+  
+    if (existingProblemTag) {
+      throw new Error(`Tag "${tagName}" is already associated with problem ${problemId}`);
+    }
+  
+    // Create the problem-tag relationship
+    return await prisma.problemTag.create({
+      data: { problemId, tagId: tag.id },
+    });
+  }
+  ,
+  deleteNote: async (_: any, { id}: { id : string }) => {
+    try {
+      await prisma.note.delete({
+        where: { id },
+      });
+      return true;
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      return false;
+    }
+  }
 };
 
 export const resolvers = { Query, Mutation };

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,24 +8,40 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   name      String
   email     String   @unique
   password  String
   notes     Note[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
 
-  @@map("user")
+model Tag {
+  id   String @id @default(uuid()) // Unique identifier for tags
+  name String @unique // Tag name (e.g., "DP", "Graph")
+
+  problems ProblemTag[]
+
+  @@map("tag")
+}
+
+model ProblemTag {
+  problemId String // No relation to Problem model
+  tagId     String
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([problemId, tagId]) // Composite primary key
+  @@map("problemtag")
 }
 
 model Note {
-  id        String   @id @default(uuid()) // Unique ID
-  title     String   @db.Text
-  content   String   @db.Text
-  tags      String[] // Array of tags
+  id        String   @id @unique @default(uuid())
+  problemId String // No relation to the Problem model
+  content   String
+  userId    String   @db.Uuid // Ensure this is UUID
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String // Foreign Key
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
